@@ -47,12 +47,36 @@ function App() {
     }
   }, [])
 
+  
   useEffect(() => {
     const controller = new AbortController()
-    loadProducts(controller.signal)
+
+    fetch('/api/products', { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`)
+        }
+        return response.json()
+      })
+      .then((data) => {
+        if (!controller.signal.aborted) {
+          setProducts(data.products)
+        }
+      })
+      .catch((err) => {
+        if (err.name !== 'AbortError' && !controller.signal.aborted) {
+          setError('Unable to load inventory. Check your Flask API.')
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false)
+        }
+      })
 
     return () => controller.abort()
-  }, [loadProducts])
+  }, [])
+
 
   async function handleAddProduct(event) {
     event.preventDefault()

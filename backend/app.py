@@ -123,4 +123,176 @@ def create_product():
     except (psycopg.Error, KeyError):
         app.logger.exception("Failed to create product")
         return jsonify(error="Unable to create product"), 503
+    
+
+
+@app.post("/api/products/<int:product_id>/adjust")
+def adjust_product_stock(product_id):
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        return jsonify(error="A JSON object is required"), 400
+
+    quantity_change = data.get("quantity_change")
+    reason = data.get("reason")
+
+    if (
+        type(quantity_change) is not int
+        or quantity_change == 0
+        or quantity_change < -2147483648
+        or quantity_change > 2147483647
+    ):
+        return jsonify(
+            error="Quantity change must be a nonzero integer"
+        ), 400
+
+    if (
+        not isinstance(reason, str)
+        or not reason.strip()
+        or len(reason.strip()) > 200
+    ):
+        return jsonify(
+            error="Reason must contain 1 to 200 characters"
+        ), 400
+
+    reason = reason.strip()
+
+    try:
+        with psycopg.connect(
+            os.environ["DATABASE_URL"],
+            connect_timeout=3
+        ) as conn:
+            with conn.cursor() as cursor:
+
+                # Lock the product row to prevent concurrent updates.
+                cursor.execute(
+                    """
+                    SELECT quantity
+                    FROM products
+                    WHERE id = %s
+                    FOR UPDATE
+                    """,
+                    (product_id,)
+                )
+
+                row = cursor.fetchone()
+
+                if row is None:
+                    return jsonify(error="Product not found"), 404
+
+                quantity_before = row[0]
+                quantity_after = quantity_before + quantity_change
+
+                if quantity_after < 0:
+                    return jsonify(error="Insufficient stock"), 409
+
+                if quantity_after > 2147483647:
+                    return jsonify(
+                        error="Stock quantity exceeds maximum"
+                    ), 400
+
+                # Update the product inventory.
+                cursor.execute(
+                    """
+                    UPDATE products
+                    SET quantity = %s,
+                        updated_at = NOW()
+                    WHERE id = %s
+                    """,
+                    (quantity_after, product_id)
+                )
+
+                # Record the stock movement.
+                cursor.execute(
+                    """
+                    INSERT INTO stock_movements (
+                        product_id,
+                        quantity_change,
+                        quantity_before,
+                        quantity_after,
+                        reason
+                    )
+                    VALUES (%s, %s, %s, %s, %s)
+                    RETURNING id, created_at
+                    """,
+                    (
+                        product_id,
+                        quantity_change,
+                        quantity_before,
+                        quantity_after,
+                        reason
+                    )
+                )
+
+                movement_id, created_at = cursor.fetchone()
+
+        return jsonify(movement={
+            "id": movement_id,
+            "product_id": product_id,
+            "quantity_change": quantity_change,
+            "quantity_before": quantity_before,
+            "quantity_after": quantity_after,
+            "reason": reason,
+            "created_at": created_at.isoformat()
+        }), 200
+
+    except (psycopg.Error, KeyError):
+        app.logger.exception("Failed to adjust product stock")
+        return jsonify(error="Unable to adjust stock"), 503
+    
+
+
+@app.get("/api/products/<int:product_id>/movements")
+def get_stock_movements(product_id):
+    try:
+        with psycopg.connect(
+            os.environ["DATABASE_URL"],
+            connect_timeout=3
+        ) as conn:
+            with conn.cursor() as cursor:
+
+                # Verify the product exists.
+                cursor.execute(
+                    "SELECT id FROM products WHERE id = %s",
+                    (product_id,)
+                )
+
+                if cursor.fetchone() is None:
+                    return jsonify(error="Product not found"), 404
+
+                # Retrieve stock movements for the product.
+                cursor.execute(
+                    """
+                    SELECT id, quantity_change,
+                           quantity_before, quantity_after,
+                           reason, created_at
+                    FROM stock_movements
+                    WHERE product_id = %s
+                    ORDER BY created_at DESC, id DESC
+                    """,
+                    (product_id,)
+                )
+
+                movements = [
+                    {
+                        "id": row[0],
+                        "quantity_change": row[1],
+                        "quantity_before": row[2],
+                        "quantity_after": row[3],
+                        "reason": row[4],
+                        "created_at": row[5].isoformat()
+                    }
+                    for row in cursor.fetchall()
+                ]
+
+        return jsonify(
+            product_id=product_id,
+            movements=movements
+        ), 200
+
+    except (psycopg.Error, KeyError):
+        app.logger.exception("Failed to retrieve stock movements")
+        return jsonify(error="Unable to retrieve movements"), 503
+
+
 

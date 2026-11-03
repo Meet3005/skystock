@@ -220,3 +220,14 @@ __marimo__/
 .streamlit/secrets.toml
 backend/.venv/
 .pytest_cache/
+
+
+# Terraform local files and sensitive state
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfplan
+**/*.tfvars
+**/*.tfvars.json
+**/crash.log
+**/crash.*.log

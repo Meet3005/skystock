@@ -7,4 +7,4 @@ RUN useradd --create-home appuser
 COPY --chown=appuser:appuser app.py .
 USER appuser
 EXPOSE 8000
-CMD ["python", "-m", "flask", "--app", "app", "run", "--host=0.0.0.0", "--port=8000"]
+CMD ["gunicorn", "--workers", "2", "--bind", "0.0.0.0:8000", "--access-logfile", "-", "app:app"]

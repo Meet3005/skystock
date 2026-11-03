@@ -3,15 +3,32 @@ import os
 from decimal import Decimal, InvalidOperation
 
 import psycopg
+from psycopg.conninfo import make_conninfo
 from flask import Flask, jsonify, request
 
 app = Flask(__name__)
+
+def database_connection_string():
+    local_url = os.getenv("DATABASE_URL")
+
+    if local_url:
+        return local_url
+
+    return make_conninfo(
+        host=os.environ["DB_HOST"],
+        port=int(os.getenv("DB_PORT", "5432")),
+        dbname=os.getenv("DB_NAME", "skystock"),
+        user=os.environ["DB_USER"],
+        password=os.environ["DB_PASSWORD"],
+        sslmode="require",
+    )
+
 
 
 @app.get("/api/health")
 def health():
     try:
-        with psycopg.connect(os.environ["DATABASE_URL"], connect_timeout=3) as conn:
+        with psycopg.connect(database_connection_string(), connect_timeout=3) as conn:
             with conn.cursor() as cursor:
                 cursor.execute("SELECT 1")
                 if cursor.fetchone() != (1,):
@@ -35,7 +52,7 @@ def home():
 def get_products():
     try:
         with psycopg.connect(
-            os.environ["DATABASE_URL"],
+            database_connection_string(),
             connect_timeout=3
         ) as conn:
             with conn.cursor() as cursor:
@@ -97,7 +114,7 @@ def create_product():
         return jsonify(error="Price must be nonnegative with at most two decimal places"), 400
 
     try:
-        with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+        with psycopg.connect(database_connection_string()) as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """
@@ -159,7 +176,7 @@ def adjust_product_stock(product_id):
 
     try:
         with psycopg.connect(
-            os.environ["DATABASE_URL"],
+            database_connection_string(),
             connect_timeout=3
         ) as conn:
             with conn.cursor() as cursor:
@@ -246,7 +263,7 @@ def adjust_product_stock(product_id):
 def get_stock_movements(product_id):
     try:
         with psycopg.connect(
-            os.environ["DATABASE_URL"],
+            database_connection_string(),
             connect_timeout=3
         ) as conn:
             with conn.cursor() as cursor:

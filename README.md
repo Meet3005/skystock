@@ -4,6 +4,15 @@
 A full-stack inventory management application built with React, Flask, and PostgreSQL, containerized with Docker and deployed on AWS using Terraform.
 
 SkyStock demonstrates the design, deployment, and troubleshooting of a cloud-hosted application, from frontend development and REST APIs to database integration and infrastructure automation.
+## Application Screenshots
+
+### Inventory Dashboard
+
+![SkyStock Inventory Dashboard](screenshots/inventory-dashboard.png)
+
+### Stock Transaction History
+
+![SkyStock Transaction History](screenshots/transaction-history.png)
 
 ## Overview
 
